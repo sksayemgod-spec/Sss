@@ -1,0 +1,319 @@
+--[[\
+	SAYEM AIMLOCK & RGB UI SYSTEM (FIXED DRAG & CLICK TOGGLE)
+--]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+
+local plr = Players.LocalPlayer
+local cam = workspace.CurrentCamera
+local gui = Instance.new("ScreenGui", plr:WaitForChild("PlayerGui"))
+gui.ResetOnSpawn = false
+
+-- State Variables
+local fovRadius = 150
+local isEnabled = false
+local isOpen = true
+local wallCheck = true
+local currentTarget = nil
+local activeHighlight = nil
+
+-- Helper Functions
+local function mk(class, parent, props)
+	local obj = Instance.new(class, parent)
+	for k, v in pairs(props) do obj[k] = v end
+	return obj
+end
+
+local function addCorner(parent, radius)
+	val = Instance.new("UICorner", parent)
+	val.CornerRadius = radius or UDim.new(0, 8)
+	return val
+end
+
+-- 1. Draggable Open/Close Button displaying "☠️S☠️"
+local openBtn = mk("TextButton", gui, {
+	Size = UDim2.new(0, 55, 0, 55),
+	Position = UDim2.new(0.02, 0, 0.7, 0),
+	Text = "☠️S☠️",
+	TextColor3 = Color3.fromRGB(255, 255, 255),
+	Font = Enum.Font.GothamBold,
+	TextSize = 16,
+	BackgroundColor3 = Color3.fromRGB(25, 25, 25),
+	Active = true
+})
+addCorner(openBtn, UDim.new(1, 0))
+mk("UIStroke", openBtn, {Thickness = 2, Color = Color3.fromRGB(255, 0, 0)})
+
+-- 2. Main Menu Panel
+local panel = mk("Frame", gui, {
+	Size = UDim2.new(0, 180, 0, 195),
+	Position = UDim2.new(0.02, 65, 0.7, 0),
+	BackgroundColor3 = Color3.fromRGB(15, 15, 15),
+	BackgroundTransparency = 0.05,
+	ClipsDescendants = true
+})
+addCorner(panel, UDim.new(0, 12))
+mk("UIStroke", panel, {Thickness = 1.5, Color = Color3.fromRGB(70, 70, 70)})
+
+-- 3. Custom Drag & Click Handler (Fixes open/close and allows smooth dragging anywhere)
+local dragging = false
+local dragStart, startPos
+local hasMoved = false
+
+openBtn.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = openBtn.Position
+		hasMoved = false
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local delta = input.Position - dragStart
+		if delta.Magnitude > 5 then
+			hasMoved = true
+		end
+		openBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		panel.Position = UDim2.new(openBtn.Position.X.Scale, openBtn.Position.X.Offset + 65, openBtn.Position.Y.Scale, openBtn.Position.Y.Offset)
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		if dragging then
+			dragging = false
+			-- If it wasn't dragged around, treat it as a click to open/close!
+			if not hasMoved then
+				isOpen = not isOpen
+				if isOpen then
+					panel.Visible = true
+					panel.Size = UDim2.new(0, 0, 0, 0)
+					TweenService:Create(panel, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, 180, 0, 195)}):Play()
+				else
+					local tween = TweenService:Create(panel, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Size = UDim2.new(0, 0, 0, 0)})
+					tween:Play()
+					tween.Completed:Connect(function()
+						if not isOpen then panel.Visible = false end
+					end)
+				end
+			end
+		end
+	end
+end)
+
+-- 4. Rainbow UI Bar (RGB Header)
+local rainbowBar = mk("Frame", panel, {
+	Size = UDim2.new(1, 0, 0, 6),
+	Position = UDim2.new(0, 0, 0, 0),
+	BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+})
+task.spawn(function()
+	while true do
+		local t = tick() * 2
+		rainbowBar.BackgroundColor3 = Color3.fromHSV(t % 1, 1, 1)
+		task.wait(0.03)
+	end
+end)
+
+-- Title Label inside Panel (SAYEM AIMLOCK)
+local titleLbl = mk("TextLabel", panel, {
+	Size = UDim2.new(1, 0, 0, 25),
+	Position = UDim2.new(0, 0, 0, 8),
+	BackgroundTransparency = 1,
+	Text = "SAYEM AIMLOCK",
+	TextColor3 = Color3.fromRGB(255, 255, 255),
+	Font = Enum.Font.GothamBold,
+	TextSize = 12
+})
+
+-- 5. Interactive Buttons Creation
+local function createButton(text, yPos, color)
+	local btn = mk("TextButton", panel, {
+		Size = UDim2.new(0, 156, 0, 30),
+		Position = UDim2.new(0.5, -78, 0, yPos),
+		Text = text,
+		TextColor3 = Color3.new(1, 1, 1),
+		BackgroundColor3 = color,
+		Font = Enum.Font.GothamBold,
+		TextSize = 11
+	})
+	addCorner(btn, UDim.new(0, 6))
+	mk("UIStroke", btn, {Color = Color3.fromRGB(100, 100, 100)})
+	return btn
+end
+
+local aimBtn = createButton("Aim Lock: OFF", 38, Color3.fromRGB(45, 45, 45))
+local wallBtn = createButton("Wall Check: ON", 74, Color3.fromRGB(0, 130, 0))
+
+-- FOV Sizer Controls Container
+local fovContainer = mk("Frame", panel, {
+	Size = UDim2.new(0, 156, 0, 28),
+	Position = UDim2.new(0.5, -78, 0, 110),
+	BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+})
+addCorner(fovContainer, UDim.new(0, 6))
+
+local fovLbl = mk("TextLabel", fovContainer, {
+	Size = UDim2.new(1, 0, 1, 0),
+	BackgroundTransparency = 1,
+	Text = "FOV: 150px",
+	TextColor3 = Color3.fromRGB(200, 200, 200),
+	Font = Enum.Font.GothamBold,
+	TextSize = 11
+})
+
+local fovMinus = mk("TextButton", fovContainer, {
+	Size = UDim2.new(0, 28, 0, 28),
+	Position = UDim2.new(0, 0, 0, 0),
+	Text = "-",
+	TextColor3 = Color3.new(1,1,1),
+	BackgroundColor3 = Color3.fromRGB(60,60,60),
+	Font = Enum.Font.GothamBold,
+	TextSize = 14
+})
+addCorner(fovMinus, UDim.new(0, 6))
+
+local fovPlus = mk("TextButton", fovContainer, {
+	Size = UDim2.new(0, 28, 0, 28),
+	Position = UDim2.new(1, -28, 0, 0),
+	Text = "+",
+	TextColor3 = Color3.new(1,1,1),
+	BackgroundColor3 = Color3.fromRGB(60,60,60),
+	Font = Enum.Font.GothamBold,
+	TextSize = 14
+})
+addCorner(fovPlus, UDim.new(0, 6))
+
+-- Target Display Label
+local nameLbl = mk("TextLabel", panel, {
+	Size = UDim2.new(0, 156, 0, 20),
+	Position = UDim2.new(0.5, -78, 0, 144),
+	Text = "Target: None",
+	TextColor3 = Color3.fromRGB(255, 255, 0),
+	BackgroundTransparency = 1,
+	Font = Enum.Font.GothamBold,
+	TextSize = 11,
+	Visible = false
+})
+
+-- 6. Dynamic FOV Circle
+local fovCircle = mk("Frame", gui, {
+	Size = UDim2.new(0, fovRadius * 2, 0, fovRadius * 2),
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	Position = UDim2.new(0.5, 0, 0.5, 0),
+	BackgroundTransparency = 1,
+	Visible = false
+})
+addCorner(fovCircle, UDim.new(1, 0))
+local circleStroke = mk("UIStroke", fovCircle, {Thickness = 2, Color = Color3.fromRGB(0, 255, 128)})
+
+-- Button Event Handlers
+wallBtn.MouseButton1Click:Connect(function()
+	wallCheck = not wallCheck
+	wallBtn.Text = wallCheck and "Wall Check: ON" or "Wall Check: OFF"
+	wallBtn.BackgroundColor3 = wallCheck and Color3.fromRGB(0, 130, 0) or Color3.fromRGB(130, 0, 0)
+end)
+
+aimBtn.MouseButton1Click:Connect(function()
+	isEnabled = not isEnabled
+	aimBtn.Text = isEnabled and "Aim Lock: ON" or "Aim Lock: OFF"
+	aimBtn.BackgroundColor3 = isEnabled and Color3.fromRGB(0, 180, 0) or Color3.fromRGB(45, 45, 45)
+	fovCircle.Visible = isEnabled
+	nameLbl.Visible = isEnabled
+	if not isEnabled then 
+		currentTarget = nil 
+		nameLbl.Text = "Target: None" 
+	end
+end)
+
+fovPlus.MouseButton1Click:Connect(function()
+	fovRadius = math.clamp(fovRadius + 25, 50, 400)
+	fovCircle.Size = UDim2.new(0, fovRadius * 2, 0, fovRadius * 2)
+	fovLbl.Text = "FOV: " .. fovRadius .. "px"
+end)
+
+fovMinus.MouseButton1Click:Connect(function()
+	fovRadius = math.clamp(fovRadius - 25, 50, 400)
+	fovCircle.Size = UDim2.new(0, fovRadius * 2, 0, fovRadius * 2)
+	fovLbl.Text = "FOV: " .. fovRadius .. "px"
+end)
+
+-- 7. Main Game Loop (Targeting, Highlights & Camera Lock)
+RunService.RenderStepped:Connect(function()
+	-- Highlight Target in Red
+	if currentTarget and currentTarget.Character then
+		if not activeHighlight or activeHighlight.Parent ~= currentTarget.Character then
+			if activeHighlight then activeHighlight:Destroy() end
+			activeHighlight = mk("Highlight", currentTarget.Character, {
+				FillColor = Color3.fromRGB(255, 0, 0),
+				OutlineColor = Color3.fromRGB(255, 255, 255)
+			})
+		end
+	else
+		if activeHighlight then 
+			activeHighlight:Destroy() 
+			activeHighlight = nil 
+		end
+	end
+
+	if not isEnabled then return end
+
+	-- Find Random Target within FOV Circle
+	if not currentTarget or not currentTarget.Character or not currentTarget.Character:FindFirstChild("HumanoidRootPart") then
+		local validTargets = {}
+		local screenCenter = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+		
+		for _, player in ipairs(Players:GetPlayers()) do
+			local char = player.Character
+			if player ~= plr and char and char:FindFirstChild("HumanoidRootPart") then
+				local humanoid = char:FindFirstChildOfClass("Humanoid")
+				if humanoid and humanoid.Health > 0 then
+					local rootPart = char.HumanoidRootPart
+					local screenPoint, onScreen = cam:WorldToViewportPoint(rootPart.Position)
+					
+					if onScreen and (Vector2.new(screenPoint.X, screenPoint.Y) - screenCenter).Magnitude <= fovRadius then
+						local visible = true
+						if wallCheck then
+							local params = RaycastParams.new()
+							params.FilterDescendantsInstances = {plr.Character, char}
+							params.FilterType = Enum.RaycastFilterType.Exclude
+							if workspace:Raycast(cam.CFrame.Position, rootPart.Position - cam.CFrame.Position, params) then
+								visible = false
+							end
+						end
+						if visible then
+							table.insert(validTargets, player)
+						end
+					end
+				end
+			end
+		end
+		
+		currentTarget = #validTargets > 0 and validTargets[math.random(1, #validTargets)] or nil
+		nameLbl.Text = currentTarget and ("Target: " .. currentTarget.Name) or "Target: Searching..."
+	end
+
+	-- Lock Camera onto Selected Target
+	if currentTarget and currentTarget.Character then
+		local rootPart = currentTarget.Character:FindFirstChild("HumanoidRootPart")
+		if rootPart then
+			local screenPoint, onScreen = cam:WorldToViewportPoint(rootPart.Position)
+			local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+			
+			if onScreen and (Vector2.new(screenPoint.X, screenPoint.Y) - center).Magnitude <= fovRadius * 1.5 then
+				cam.CFrame = CFrame.new(cam.CFrame.Position, rootPart.Position + Vector3.new(0, 1.5, 0))
+			else
+				currentTarget = nil
+			end
+		else
+			currentTarget = nil
+		end
+	else
+		currentTarget = nil
+	end
+end)
