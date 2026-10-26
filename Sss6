@@ -1,0 +1,29 @@
+local P, RS = game:GetService("Players"), game:GetService("RunService")
+local plr, cam, fov, on, wall, t, hl = P.LocalPlayer, workspace.CurrentCamera, 150, false, true, nil, nil
+local gui = Instance.new("ScreenGui", plr:WaitForChild("PlayerGui")) gui.ResetOnSpawn = false
+local function mk(c, p, pr) local o = Instance.new(c, p) for k,v in pairs(pr) do o[k]=v end return o end
+local h = mk("ImageButton", gui, {Size = UDim2.new(0,50,0,50), Position = UDim2.new(0.02,0,0.7,0), Image = "rbxassetid://75922493123199", BackgroundColor3 = Color3.fromRGB(30,100,30)})
+mk("UICorner", h, {CornerRadius = UDim.new(1,0)}) mk("UIStroke", h, {Color = Color3.fromRGB(0,255,0)})
+local p = mk("Frame", gui, {Size = UDim2.new(0,140,0,85), Position = UDim2.new(0.02,60,0.7,0), BackgroundColor3 = Color3.fromRGB(20,20,20)})
+mk("UICorner", p) mk("UIStroke", p, {Color = Color3.fromRGB(60,60,60)})
+local b1, b2 = mk("TextButton", p, {Size = UDim2.new(0,120,0,22), Position = UDim2.new(0.5,-60,0,8), Text = "Aim: OFF", TextColor3 = Color3.new(1,1,1), BackgroundColor3 = Color3.fromRGB(50,50,50), Font = 3, TextSize = 10}), mk("TextButton", p, {Size = UDim2.new(0,120,0,22), Position = UDim2.new(0.5,-60,0,34), Text = "Wall: ON", TextColor3 = Color3.new(1,1,1), BackgroundColor3 = Color3.fromRGB(0,140,0), Font = 3, TextSize = 10})
+mk("UICorner", b1) mk("UICorner", b2) local lbl = mk("TextLabel", p, {Size = UDim2.new(0,120,0,18), Position = UDim2.new(0.5,-60,0,60), Text = "Target: None", TextColor3 = Color3.fromRGB(255,255,0), BackgroundTransparency = 1, Font = 3, TextSize = 10, Visible = false})
+local fv = mk("Frame", gui, {Size = UDim2.new(0,fov*2,0,fov*2), AnchorPoint = Vector2.new(0.5,0.5), Position = UDim2.new(0.5,0,0.5,0), BackgroundTransparency = 1, Visible = false})
+mk("UICorner", fv, {CornerRadius = UDim.new(1,0)}) mk("UIStroke", fv, {Thickness = 2, Color = Color3.fromRGB(0,255,128)})
+h.MouseButton1Click:Connect(function() p.Visible = not p.Visible end)
+b2.MouseButton1Click:Connect(function() wall = not wall b2.Text = wall and "Wall: ON" or "Wall: OFF" b2.BackgroundColor3 = wall and Color3.fromRGB(0,140,0) or Color3.fromRGB(140,0,0) end)
+b1.MouseButton1Click:Connect(function() on = not on b1.Text = on and "Aim: ON" or "Aim: OFF" b1.BackgroundColor3 = on and Color3.fromRGB(0,200,0) or Color3.fromRGB(50,50,50) fv.Visible, lbl.Visible = on, on if not on then t = nil lbl.Text = "Target: None" end end)
+RS.RenderStepped:Connect(function()
+if t and t.Character then if not hl or hl.Parent ~= t.Character then if hl then hl:Destroy() end hl = mk("Highlight", t.Character, {FillColor = Color3.fromRGB(255,0,0)}) end elseif hl then hl:Destroy() hl = nil end
+if not on then return end
+if not t or not t.Character or not t.Character:FindFirstChild("HumanoidRootPart") then
+local tgs, c = {}, Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
+for _, pl in ipairs(P:GetPlayers()) do local ch = pl.Character
+if pl ~= plr and ch and ch:FindFirstChild("HumanoidRootPart") and ch:FindFirstChildOfClass("Humanoid") and ch:FindFirstChildOfClass("Humanoid").Health > 0 then
+local rt, pos = ch.HumanoidRootPart, cam:WorldToViewportPoint(ch.HumanoidRootPart.Position)
+if select(2, cam:WorldToViewportPoint(rt.Position)) and (Vector2.new(pos.X, pos.Y) - c).Magnitude <= fov then
+local vis = true if wall then local rp = RaycastParams.new() rp.FilterDescendantsInstances, rp.FilterType = {plr.Character, ch}, Enum.RaycastFilterType.Exclude if workspace:Raycast(cam.CFrame.Position, rt.Position - cam.CFrame.Position, rp) then vis = false end end
+if vis then table.insert(tgs, pl) end end end end end
+t = #tgs > 0 and tgs[math.random(1, #tgs)] or nil lbl.Text = t and ("Target: " .. t.Name) or "Target: Searching..." end
+local rt = t and t.Character and t.Character:FindFirstChild("HumanoidRootPart")
+if rt and select(2, cam:WorldToViewportPoint(rt.Position)) then cam.CFrame = CFrame.new(cam.CFrame.Position, rt.Position + Vector3.new(0, 1.5, 0)) elseif t then t = nil end end)
