@@ -1,0 +1,73 @@
+local P, RS = game:GetService("Players"), game:GetService("RunService")
+local plr, cam = P.LocalPlayer, workspace.CurrentCamera
+local fovR, on, open, wall = 150, false, true, true
+local target, hl
+
+local gui = Instance.new("ScreenGui", plr:WaitForChild("PlayerGui"))
+gui.ResetOnSpawn = false
+
+local function make(c, p, props)
+	local o = Instance.new(c, p) for k, v in pairs(props) do o[k] = v end return o
+end
+
+local function style(b, t, col)
+	b.Size, b.Text, b.TextColor3, b.BackgroundColor3, b.Font, b.TextSize = UDim2.new(0, 140, 0, 30), t, Color3.new(1,1,1), col, Enum.Font.GothamBold, 11
+	Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
+	Instance.new("UIStroke", b).Color = Color3.new(1,1,1)
+	local g = Instance.new("UIGradient", b) g.Color = ColorSequence.new(Color3.new(1,1,1), Color3.fromRGB(150,150,150)) g.Rotation = 90
+end
+
+local hulk = make("ImageButton", gui, {Size = UDim2.new(0,50,0,50), Position = UDim2.new(0.02,0,0.7,0), Image = "rbxassetid://75922493123199", BackgroundColor3 = Color3.fromRGB(30,100,30)})
+Instance.new("UICorner", hulk).CornerRadius = UDim.new(1,0) Instance.new("UIStroke", hulk).Color = Color3.fromRGB(0,255,0)
+
+local panel = make("Frame", gui, {Size = UDim2.new(0,160,0,110), Position = UDim2.new(0.02,60,0.7,0), BackgroundColor3 = Color3.fromRGB(20,20,20), BackgroundTransparency = 0.1})
+Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 12) Instance.new("UIStroke", panel).Color = Color3.fromRGB(60,60,60)
+
+local tBtn = make("TextButton", panel, {Position = UDim2.new(0.5,-70,0,8)}) style(tBtn, "Aim Lock: OFF", Color3.fromRGB(50,50,50))
+local wBtn = make("TextButton", panel, {Position = UDim2.new(0.5,-70,0,44)}) style(wBtn, "Wall Check: ON", Color3.fromRGB(0,140,0))
+local lbl = make("TextLabel", panel, {Size = UDim2.new(0,140,0,20), Position = UDim2.new(0.5,-70,0,80), Text = "Target: None", TextColor3 = Color3.fromRGB(255,255,0), BackgroundTransparency = 1, Font = 3, TextSize = 11, Visible = false})
+
+local fov = make("Frame", gui, {Size = UDim2.new(0,fovR*2,0,fovR*2), AnchorPoint = Vector2.new(0.5,0.5), Position = UDim2.new(0.5,0,0.5,0), BackgroundTransparency = 1, Visible = false})
+Instance.new("UICorner", fov).CornerRadius = UDim.new(1,0) make("UIStroke", fov, {Thickness = 2, Color = Color3.fromRGB(0,255,128)})
+
+hulk.MouseButton1Click:Connect(function() open = not open panel.Visible = open end)
+wBtn.MouseButton1Click:Connect(function() wall = not wall wBtn.Text = wall and "Wall Check: ON" or "Wall Check: OFF" wBtn.BackgroundColor3 = wall and Color3.fromRGB(0,140,0) or Color3.fromRGB(140,0,0) end)
+tBtn.MouseButton1Click:Connect(function() on = not on tBtn.Text = on and "Aim Lock: ON" or "Aim Lock: OFF" tBtn.BackgroundColor3 = on and Color3.fromRGB(0,200,0) or Color3.fromRGB(50,50,50) fov.Visible, lbl.Visible = on, on if not on then target = nil lbl.Text = "Target: None" end end)
+
+RS.RenderStepped:Connect(function()
+	if target and target.Character then
+		if not hl or hl.Parent ~= target.Character then if hl then hl:Destroy() end hl = make("Highlight", target.Character, {FillColor = Color3.fromRGB(255,0,0), OutlineColor = Color3.new(1,1,1)}) end
+	else if hl then hl:Destroy() hl = nil end end
+	if not on then return end
+
+	if not target or not target.Character or not target.Character:FindFirstChild("HumanoidRootPart") then
+		local tgs, c = {}, Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
+		for _, p in ipairs(P:GetPlayers()) do
+			if p ~= plr and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+				local hum = p.Character:FindFirstChildOfClass("Humanoid")
+				if hum and hum.Health > 0 then
+					local root = p.Character.HumanoidRootPart
+					local pos, onScr = cam:WorldToViewportPoint(root.Position)
+					if onScr and (Vector2.new(pos.X, pos.Y) - c).Magnitude <= fovR then
+						local vis = true
+						if wall then
+							local rp = RaycastParams.new() rp.FilterDescendantsInstances = {plr.Character, p.Character} rp.FilterType = Enum.RaycastFilterType.Exclude
+							if workspace:Raycast(cam.CFrame.Position, root.Position - cam.CFrame.Position, rp) then vis = false end
+						end
+						if vis then table.insert(tgs, p) end
+					end
+				end
+			end
+		end
+		target = #tgs > 0 and tgs[math.random(1, #tgs)] or nil
+		lbl.Text = target and ("Target: " .. target.Name) or "Target: Searching..."
+	end
+
+	if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+		local root = target.Character.HumanoidRootPart
+		local pos, onScr = cam:WorldToViewportPoint(root.Position)
+		if onScr and (Vector2.new(pos.X, pos.Y) - Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)).Magnitude <= fovR * 1.5 then
+			cam.CFrame = CFrame.new(cam.CFrame.Position, root.Position + Vector3.new(0, 1.5, 0))
+		else target = nil end
+	else target = nil end
+end)
