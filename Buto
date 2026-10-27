@@ -1,0 +1,394 @@
+--[[\
+	SAYEM AIMLOCK - INSTANT CLOSEST TARGET LOCK
+--]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+
+local plr = Players.LocalPlayer
+local cam = workspace.CurrentCamera
+local gui = Instance.new("ScreenGui", plr:WaitForChild("PlayerGui"))
+gui.ResetOnSpawn = false
+
+-- State Variables
+local fovRadius = 150
+local isEnabled = false
+local isOpen = true
+local wallCheck = true
+local boxEspEnabled = true
+local lineEspEnabled = true
+local currentTarget = nil
+
+-- Helper Functions
+local function mk(class, parent, props)
+	local obj = Instance.new(class, parent)
+	for k, v in pairs(props) do obj[k] = v end
+	return obj
+end
+
+local function addCorner(parent, radius)
+	local corner = Instance.new("UICorner", parent)
+	corner.CornerRadius = radius or UDim.new(0, 8)
+	return corner
+end
+
+-- 1. Draggable Open/Close Button displaying capital "S"
+local openBtn = mk("TextButton", gui, {
+	Size = UDim2.new(0, 50, 0, 50),
+	Position = UDim2.new(0.02, 0, 0.7, 0),
+	Text = "S",
+	TextColor3 = Color3.fromRGB(255, 255, 255),
+	Font = Enum.Font.GothamBold,
+	TextSize = 22,
+	BackgroundColor3 = Color3.fromRGB(25, 25, 25),
+	Active = true,
+	ZIndex = 10
+})
+addCorner(openBtn, UDim.new(1, 0))
+mk("UIStroke", openBtn, {Thickness = 2, Color = Color3.fromRGB(255, 0, 0)})
+
+-- 2. Main Menu Panel
+local panel = mk("Frame", gui, {
+	Size = UDim2.new(0, 180, 0, 275),
+	Position = UDim2.new(0.02, 60, 0.7, 0),
+	BackgroundColor3 = Color3.fromRGB(15, 15, 15),
+	BackgroundTransparency = 0.05,
+	ClipsDescendants = true,
+	ZIndex = 5
+})
+addCorner(panel, UDim.new(0, 12))
+
+-- Rainbow UI Corner Stroke / Border effect
+local panelStroke = mk("UIStroke", panel, {Thickness = 2, Color = Color3.fromRGB(255, 255, 255)})
+task.spawn(function()
+	while true do
+		local t = tick() * 2
+		local rainbowColor = Color3.fromHSV(t % 1, 1, 1)
+		panelStroke.Color = rainbowColor
+		task.wait(0.03)
+	end
+end)
+
+-- Fully Fixed Drag & Click Handler
+local dragging = false
+local dragStart, startPos
+local hasMoved = false
+
+openBtn.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = openBtn.Position
+		hasMoved = false
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local delta = input.Position - dragStart
+		if delta.Magnitude > 5 then hasMoved = true end
+		openBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		panel.Position = UDim2.new(openBtn.Position.X.Scale, openBtn.Position.X.Offset + 60, openBtn.Position.Y.Scale, openBtn.Position.Y.Offset)
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		if dragging then
+			dragging = false
+			if not hasMoved then
+				isOpen = not isOpen
+				if isOpen then
+					panel.Visible = true
+					panel.Size = UDim2.new(0, 0, 0, 0)
+					TweenService:Create(panel, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0, 180, 0, 275)}):Play()
+				else
+					local tween = TweenService:Create(panel, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Size = UDim2.new(0, 0, 0, 0)})
+					tween:Play()
+					tween.Completed:Connect(function()
+						if not isOpen then panel.Visible = false end
+					end)
+				end
+			end
+		end
+	end
+end)
+
+-- 3. Rainbow UI Bar (RGB Header)
+local rainbowBar = mk("Frame", panel, {
+	Size = UDim2.new(1, 0, 0, 6),
+	Position = UDim2.new(0, 0, 0, 0),
+	BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+	ZIndex = 6
+})
+task.spawn(function()
+	while true do
+		local t = tick() * 2
+		rainbowBar.BackgroundColor3 = Color3.fromHSV(t % 1, 1, 1)
+		task.wait(0.03)
+	end
+end)
+
+-- Title Label inside Panel (SAYEM AIMLOCK)
+local titleLbl = mk("TextLabel", panel, {
+	Size = UDim2.new(1, 0, 0, 25),
+	Position = UDim2.new(0, 0, 0, 8),
+	BackgroundTransparency = 1,
+	Text = "SAYEM AIMLOCK",
+	TextColor3 = Color3.fromRGB(255, 255, 255),
+	Font = Enum.Font.GothamBold,
+	TextSize = 12,
+	ZIndex = 6
+})
+
+-- 4. Scrolling Frame for Controls & Credits
+local scrollFrame = mk("ScrollingFrame", panel, {
+	Size = UDim2.new(1, -10, 1, -40),
+	Position = UDim2.new(0, 5, 0, 35),
+	BackgroundTransparency = 1,
+	CanvasSize = UDim2.new(0, 0, 0, 240),
+	ScrollBarThickness = 4,
+	ZIndex = 6
+})
+
+local function createButton(text, yPos, color)
+	local btn = mk("TextButton", scrollFrame, {
+		Size = UDim2.new(0, 156, 0, 28),
+		Position = UDim2.new(0.5, -78, 0, yPos),
+		Text = text,
+		TextColor3 = Color3.new(1, 1, 1),
+		BackgroundColor3 = color,
+		Font = Enum.Font.GothamBold,
+		TextSize = 10,
+		ZIndex = 7
+	})
+	addCorner(btn, UDim.new(0, 6))
+	mk("UIStroke", btn, {Color = Color3.fromRGB(100, 100, 100)})
+	return btn
+end
+
+local aimBtn = createButton("Aim Lock: OFF", 5, Color3.fromRGB(45, 45, 45))
+local wallBtn = createButton("Wall Check: ON", 38, Color3.fromRGB(0, 130, 0))
+local boxBtn = createButton("Box ESP: ON", 71, Color3.fromRGB(0, 130, 0))
+local lineBtn = createButton("Line ESP: ON", 104, Color3.fromRGB(0, 130, 0))
+
+-- FOV Sizer Container
+local fovContainer = mk("Frame", scrollFrame, {
+	Size = UDim2.new(0, 156, 0, 28),
+	Position = UDim2.new(0.5, -78, 0, 137),
+	BackgroundColor3 = Color3.fromRGB(30, 30, 30),
+	ZIndex = 7
+})
+addCorner(fovContainer, UDim.new(0, 6))
+
+local fovLbl = mk("TextLabel", fovContainer, {
+	Size = UDim2.new(1, 0, 1, 0),
+	BackgroundTransparency = 1,
+	Text = "FOV: 150px",
+	TextColor3 = Color3.fromRGB(200, 200, 200),
+	Font = Enum.Font.GothamBold,
+	TextSize = 10,
+	ZIndex = 8
+})
+
+local fovMinus = mk("TextButton", fovContainer, {
+	Size = UDim2.new(0, 28, 0, 28),
+	Position = UDim2.new(0, 0, 0, 0),
+	Text = "-",
+	TextColor3 = Color3.new(1,1,1),
+	BackgroundColor3 = Color3.fromRGB(60,60,60),
+	Font = Enum.Font.GothamBold,
+	TextSize = 12,
+	ZIndex = 8
+})
+addCorner(fovMinus, UDim.new(0, 6))
+
+local fovPlus = mk("TextButton", fovContainer, {
+	Size = UDim2.new(0, 28, 0, 28),
+	Position = UDim2.new(1, -28, 0, 0),
+	Text = "+",
+	TextColor3 = Color3.new(1,1,1),
+	BackgroundColor3 = Color3.fromRGB(60,60,60),
+	Font = Enum.Font.GothamBold,
+	TextSize = 12,
+	ZIndex = 8
+})
+addCorner(fovPlus, UDim.new(0, 6))
+
+-- Target Display Label
+local nameLbl = mk("TextLabel", scrollFrame, {
+	Size = UDim2.new(0, 156, 0, 20),
+	Position = UDim2.new(0.5, -78, 0, 172),
+	Text = "Target: None",
+	TextColor3 = Color3.fromRGB(255, 255, 0),
+	BackgroundTransparency = 1,
+	Font = Enum.Font.GothamBold,
+	TextSize = 10,
+	Visible = false,
+	ZIndex = 7
+})
+
+-- Credits Label at the End of Scrolling Frame
+local creditsLbl = mk("TextLabel", scrollFrame, {
+	Size = UDim2.new(0, 156, 0, 25),
+	Position = UDim2.new(0.5, -78, 0, 200),
+	Text = "Credits: SAYEM",
+	TextColor3 = Color3.fromRGB(0, 255, 255),
+	BackgroundTransparency = 1,
+	Font = Enum.Font.GothamBold,
+	TextSize = 11,
+	ZIndex = 7
+})
+
+-- 5. Dynamic FOV Circle
+local fovCircle = mk("Frame", gui, {
+	Size = UDim2.new(0, fovRadius * 2, 0, fovRadius * 2),
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	Position = UDim2.new(0.5, 0, 0.5, 0),
+	BackgroundTransparency = 1,
+	Visible = false
+})
+addCorner(fovCircle, UDim.new(1, 0))
+mk("UIStroke", fovCircle, {Thickness = 2, Color3.fromRGB(0, 255, 128)})
+
+-- Button Toggles Event Handlers
+aimBtn.MouseButton1Click:Connect(function()
+	isEnabled = not isEnabled
+	aimBtn.Text = isEnabled and "Aim Lock: ON" or "Aim Lock: OFF"
+	aimBtn.BackgroundColor3 = isEnabled and Color3.fromRGB(0, 180, 0) or Color3.fromRGB(45, 45, 45)
+	fovCircle.Visible = isEnabled
+	nameLbl.Visible = isEnabled
+	if not isEnabled then 
+		currentTarget = nil 
+		nameLbl.Text = "Target: None" 
+	end
+end)
+
+wallBtn.MouseButton1Click:Connect(function()
+	wallCheck = not wallCheck
+	wallBtn.Text = wallCheck and "Wall Check: ON" or "Wall Check: OFF"
+	wallBtn.BackgroundColor3 = wallCheck and Color3.fromRGB(0, 130, 0) or Color3.fromRGB(130, 0, 0)
+end)
+
+boxBtn.MouseButton1Click:Connect(function()
+	boxEspEnabled = not boxEspEnabled
+	boxBtn.Text = boxEspEnabled and "Box ESP: ON" or "Box ESP: OFF"
+	boxBtn.BackgroundColor3 = boxEspEnabled and Color3.fromRGB(0, 130, 0) or Color3.fromRGB(130, 0, 0)
+end)
+
+lineBtn.MouseButton1Click:Connect(function()
+	lineEspEnabled = not lineEspEnabled
+	lineBtn.Text = lineEspEnabled and "Line ESP: ON" or "Line ESP: OFF"
+	lineBtn.BackgroundColor3 = lineEspEnabled and Color3.fromRGB(0, 130, 0) or Color3.fromRGB(130, 0, 0)
+end)
+
+fovPlus.MouseButton1Click:Connect(function()
+	fovRadius = math.clamp(fovRadius + 25, 50, 400)
+	fovCircle.Size = UDim2.new(0, fovRadius * 2, 0, fovRadius * 2)
+	fovLbl.Text = "FOV: " .. fovRadius .. "px"
+end)
+
+fovMinus.MouseButton1Click:Connect(function()
+	fovRadius = math.clamp(fovRadius - 25, 50, 400)
+	fovCircle.Size = UDim2.new(0, fovRadius * 2, 0, fovRadius * 2)
+	fovLbl.Text = "FOV: " .. fovRadius .. "px"
+end)
+
+-- Tables to manage ESP drawings for all players
+local highlights = {}
+local boxes = {}
+local lines = {}
+
+-- 6. Main Game Loop (Instant Closest Target Selection & ESP)
+RunService.RenderStepped:Connect(function()
+	local screenCenter = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+	local closestPlayer = nil
+	local shortestDist = math.huge
+
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= plr then
+			local char = p.Character
+			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+			if char and hum and hum.Health > 0 then
+				if not highlights[p] or highlights[p].Parent ~= char then
+					if highlights[p] then highlights[p]:Destroy() end
+					highlights[p] = mk("Highlight", char, {
+						FillColor = Color3.fromRGB(255, 0, 0),
+						OutlineColor = Color3.fromRGB(255, 255, 255)
+					})
+				end
+
+				local pos, onScreen = cam:WorldToViewportPoint(hrp.Position)
+				if onScreen then
+					if boxEspEnabled then
+						if not boxes[p] then
+							boxes[p] = mk("Frame", gui, {BackgroundTransparency = 1})
+							mk("UIStroke", boxes[p], {Thickness = 1.5, Color = Color3.fromRGB(255, 0, 0)})
+						end
+						local sizeY = math.clamp(2000 / pos.Z, 20, 400)
+						local sizeX = sizeY * 0.55
+						boxes[p].Size = UDim2.new(0, sizeX, 0, sizeY)
+						boxes[p].Position = UDim2.new(0, pos.X - sizeX/2, 0, pos.Y - sizeY/2)
+						boxes[p].Visible = true
+					else
+						if boxes[p] then boxes[p].Visible = false end
+					end
+
+					if lineEspEnabled then
+						if not lines[p] then
+							lines[p] = mk("Frame", gui, {BackgroundColor3 = Color3.fromRGB(255, 0, 0), Size = UDim2.new(0, 1, 0, 1)})
+						end
+						local bottomScreenPos = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y)
+						local targetPos2D = Vector2.new(pos.X, pos.Y)
+						local distToBottom = (targetPos2D - bottomScreenPos).Magnitude
+						lines[p].Size = UDim2.new(0, 1, 0, distToBottom)
+						lines[p].Position = UDim2.new(0, bottomScreenPos.X, 0, bottomScreenPos.Y)
+						lines[p].Visible = true
+					else
+						if lines[p] then lines[p].Visible = false end
+					end
+
+					-- Instantly find the absolute closest player from screen center (crosshair) within FOV
+					if isEnabled then
+						local distFromCenter = (Vector2.new(pos.X, pos.Y) - screenCenter).Magnitude
+						if distFromCenter <= fovRadius then
+							local visible = true
+							if wallCheck then
+								local params = RaycastParams.new()
+								params.FilterDescendantsInstances = {plr.Character, char}
+								params.FilterType = Enum.RaycastFilterType.Exclude
+								if workspace:Raycast(cam.CFrame.Position, hrp.Position - cam.CFrame.Position, params) then
+									visible = false
+								end
+							end
+							if visible and distFromCenter < shortestDist then
+								shortestDist = distFromCenter
+								closestPlayer = p
+							end
+						end
+					end
+				else
+					if boxes[p] then boxes[p].Visible = false end
+					if lines[p] then lines[p].Visible = false end
+				end
+			else
+				if highlights[p] then highlights[p]:Destroy(); highlights[p] = nil end
+				if boxes[p] then boxes[p]:Destroy(); boxes[p] = nil end
+				if lines[p] then lines[p]:Destroy(); lines[p] = nil end
+			end
+		end
+	end
+
+	currentTarget = closestPlayer
+	if isEnabled then
+		nameLbl.Text = currentTarget and ("Target: " .. currentTarget.Name) or "Target: None"
+		if currentTarget and currentTarget.Character and currentTarget.Character:FindFirstChild("HumanoidRootPart") then
+			local hrp = currentTarget.Character.HumanoidRootPart
+			cam.CFrame = CFrame.new(cam.CFrame.Position, hrp.Position + Vector3.new(0, 1.5, 0))
+		end
+	end
+end)
