@@ -1,0 +1,57 @@
+-- AimLock V2 - OPEN Button + FOV Circle + Smoothness
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local player = Players.LocalPlayer
+local cam = workspace.CurrentCamera
+
+local Config = { Enabled = false, FOV = 120, Smoothness = 0.68, Open = false }
+
+-- UI
+local gui = Instance.new("ScreenGui", player.PlayerGui)
+gui.Name = "AimLockV2"
+
+local mainPanel = Instance.new("Frame", gui)
+mainPanel.Size = UDim2.fromOffset(320, 280)
+mainPanel.Position = UDim2.new(1, -340, 0, 80)
+mainPanel.Visible = false
+mainPanel.BackgroundColor3 = Color3.fromRGB(20,20,20)
+
+local openBtn = Instance.new("TextButton", gui)
+openBtn.Size = UDim2.fromOffset(90, 35)
+openBtn.Position = UDim2.new(1, -110, 0, 80)
+openBtn.Text = "OPEN"
+openBtn.BackgroundColor3 = Color3.fromRGB(0,255,120)
+
+openBtn.MouseButton1Click:Connect(function()
+    Config.Open = not Config.Open
+    mainPanel.Visible = Config.Open
+    openBtn.Text = Config.Open and "CLOSE" or "OPEN"
+end)
+
+-- FOV Circle
+local fovCircle = Drawing.new("Circle")
+fovCircle.Visible = true
+fovCircle.Color = Color3.fromRGB(0,255,120)
+fovCircle.Thickness = 2
+fovCircle.NumSides = 64
+fovCircle.Transparency = 0.7
+
+local smoothCircle = Drawing.new("Circle")
+smoothCircle.Visible = true
+smoothCircle.Color = Color3.fromRGB(0,255,120)
+smoothCircle.Thickness = 1
+smoothCircle.Transparency = 0.3
+
+RunService.RenderStepped:Connect(function()
+    local center = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
+    fovCircle.Position = center
+    fovCircle.Radius = Config.FOV
+    smoothCircle.Position = center
+    smoothCircle.Radius = Config.FOV * Config.Smoothness
+    
+    fovCircle.Visible = Config.Open
+    smoothCircle.Visible = Config.Open
+end)
+
+-- Aimlock logic same as before, using Config.FOV & Smoothness
